@@ -144,7 +144,7 @@ function game:load()
     self.sword_image = love.graphics.newImage("assets/sword.png")
     self.sword_image:setFilter("nearest")
     self.oof = love.audio.newSource("assets/oof.mp3", "stream")
-
+    self.d2 = love.audio.newSource("assets/D2BeyondLight.mp3", "stream")
 
 
     self.enemies = {
@@ -173,9 +173,7 @@ end
 
 
 function game:draw()
-	if not self.oof:isPlaying( ) then
-		love.audio.play( self.oof )
-	end    
+	love.audio.play( self.d2 )
     --draw map
     local curr_x = 0
     local curr_y = 0
