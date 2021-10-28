@@ -30,17 +30,25 @@ function newButton(text, fn)
     }
 end
 
-main_menu = {}
-local game_stack = {main_menu}
+local game_stack = {}
+function game_stack:push(item)
+    if item.load then item:load() end
+    table.insert(self, item)
+end
 
+function game_stack:pop()
+    if self[#self].unload then self[#self]:unload() end
+    table.remove(self, #self, 1)
+end
+
+main_menu = {}
 function main_menu:load()
     self.BUTTON_HEIGHT = 64
     self.buttons = {}
     font = love.graphics.newFont(32)
     table.insert(self.buttons, newButton("Start Game",
      function()
-        game:load()
-        table.insert(game_stack, game)
+         game_stack:push(game)
      end))
 
      table.insert(self.buttons, newButton("Map Editor",
@@ -53,6 +61,7 @@ function main_menu:load()
         love.event.quit(0)
      end))     
 end
+
 function main_menu:draw()
     local ww = love.graphics.getWidth()
     local wh = love.graphics.getHeight()
@@ -156,10 +165,15 @@ function game:load()
         y = 9
     }
 
-    self.player_max_health = 10
     self.player = {
         x = 5,
         y = 5,
+
+        start_x  = 5,
+        start_y  = 5,
+        target_x = 5,
+        target_y = 5,
+
         items = {
             potions = 0,
             sword = 0,
@@ -167,30 +181,86 @@ function game:load()
             arrows = 0,
             keys = 0
         },
-        health = self.player_max_health - 3
+
+        health     = 7,
+        max_health = 10,
+
+        current_action = "",
+        action_timer   = 0,
+        queued_actions = {},
     }
 end
 
+function can_walk_on(board, x, y)
+    local cell = board[y + 1][x + 1]
+    
+    return cell == "g"
+end
+
+
+function game:update(dt)
+    if self.player.current_action == "" and #self.player.queued_actions > 0 then
+        local action = self.player.queued_actions[1]
+        table.remove(self.player.queued_actions, 1, 1)
+
+        if action[1] == "move" then
+            local px = math.floor(self.player.x + 0.5)
+            local py = math.floor(self.player.y + 0.5)
+
+            if can_walk_on(self.game_state, px + action[2], py + action[3]) then
+                self.player.start_x  = px
+                self.player.start_y  = py
+                self.player.target_x = px + action[2]
+                self.player.target_y = py + action[3]
+                self.player.current_action = action[1]
+
+                self.player.action_timer = 0
+            end
+        end
+    end
+
+    self.player.action_timer = self.player.action_timer + dt * 3
+    if self.player.action_timer > 1 then
+        self.player.action_timer = 0
+        self.player.current_action = ""
+
+        self.player.x = self.player.target_x
+        self.player.y = self.player.target_y
+    end
+
+    if self.player.current_action == "move" then
+        local t = self.player.action_timer
+        self.player.x = t * self.player.target_x + (1 - t) * self.player.start_x
+        self.player.y = t * self.player.target_y + (1 - t) * self.player.start_y
+    end
+end
+
+function game:keypressed(key, scancode, isrepeat)
+    -- This is liable to break things in the future, but for now, I only care about the first time a key is pressed.
+    if isrepeat then return end
+
+    if key == "left"  then table.insert(self.player.queued_actions, { "move", -1,  0 }) end
+    if key == "right" then table.insert(self.player.queued_actions, { "move",  1,  0 }) end
+    if key == "up"    then table.insert(self.player.queued_actions, { "move",  0, -1 }) end
+    if key == "down"  then table.insert(self.player.queued_actions, { "move",  0,  1 }) end
+end
 
 function game:draw()
-	love.audio.play( self.d2 )
+	--love.audio.play( self.d2 )
+
     --draw map
-    local curr_x = 0
-    local curr_y = 0
     local square_size = self.wh/#self.game_state[1]
-    for _,y in ipairs(self.game_state) do
-        for _,x in ipairs(y) do
+
+    love.graphics.setColor(1,1,1,1)
+    for y,row in ipairs(self.game_state) do
+        for x,col in ipairs(row) do
             local images = {
                 w = self.water_image,
                 g = self.grass_image,
                 b = self.brick_image
             }
-            love.graphics.setColor(1,1,1,1)
-            love.graphics.draw(images[x],curr_x,curr_y,0,square_size/16,square_size/16)
-            curr_x = curr_x + square_size
+            love.graphics.draw(images[col],(x - 1) * square_size,(y - 1) * square_size,0,square_size/16,square_size/16)
         end
-        curr_x = 0
-        curr_y = curr_y + square_size
     end
 
     --draw items on map
@@ -210,23 +280,28 @@ function game:draw()
     local inventory_height = 0.1 * self.wh
     love.graphics.setColor(0,0,0,1)
     love.graphics.rectangle("fill", 0, self.wh - inventory_height, self.ww, inventory_height)
-    imgs = {
-        self.potion_image,
-        self.sword_image,
-        self.bow_image,
-        self.arrow_image,
-        self.key_image
+    local item_imgs = {
+        potions = self.potion_image,
+        sword = self.sword_image,
+        bow = self.bow_image,
+        arrows = self.arrow_image,
+        keys = self.key_image
     }
-    for i=1, 5 do
+    local i = 0
+    for item, amount in pairs(self.player.items) do
         love.graphics.setColor(0.4,0.4,0.4,1)
-        love.graphics.rectangle("fill", (self.ww / 2 / 5) * (i-1) + 5, self.wh - inventory_height + 5,  (self.ww / 2 / 5) - 10, inventory_height - 10)
+        love.graphics.rectangle("fill", i * (self.ww / 10) + 5, self.wh - inventory_height + 5, (self.ww / 10) - 10, inventory_height - 10)
+
         --insert item that goes here if there is one
         love.graphics.setColor(1,1,1,1)
-        love.graphics.draw(imgs[i], (self.ww / 2 / 5) * (i-1) + 5, self.wh - inventory_height + 5, 0, ((self.ww / 2 / 5) - 10) / 16, (inventory_height - 10) /16)
-        
+        love.graphics.draw(item_imgs[item],
+            i * (self.ww / 10) + 15, self.wh - inventory_height + 5,
+            0,
+            ((self.ww / 13) - 10) / 16, (inventory_height - 10) / 16)
 
+        love.graphics.print(tostring(amount), i * (self.ww / 10) + 7, self.wh - inventory_height + 7)
 
-        love.graphics.print(tostring(i), (self.ww / 2 / 5) * (i-1) + 7, self.wh - inventory_height + 7)
+        i = i + 1
     end
 
     --health bar
@@ -235,11 +310,27 @@ function game:draw()
     love.graphics.setColor(1,0,0,1)
     love.graphics.rectangle("fill", self.ww / 2 + 10, self.wh - inventory_height + 30, self.ww / 2 - 20, inventory_height - 40)
     love.graphics.setColor(0,1,0,1)
-    love.graphics.rectangle("fill", self.ww / 2 + 10, self.wh-inventory_height + 30, (self.ww / 2 - 20) * (self.player["health"]/self.player_max_health), inventory_height - 40)
+    love.graphics.rectangle("fill", self.ww / 2 + 10, self.wh-inventory_height + 30, (self.ww / 2 - 20) * (self.player["health"]/self.player.max_health), inventory_height - 40)
 end
 
 function love.load()
-    game_stack[#game_stack]:load()
+    game_stack:push(main_menu)
+end
+
+function love.update(dt)
+    if love.keyboard.isDown "escape" then
+        love.event.quit()
+    end
+
+    if game_stack[#game_stack].update then
+        game_stack[#game_stack]:update(dt)
+    end
+end
+
+function love.keypressed(key, scancode, isrepeat)
+    if game_stack[#game_stack].keypressed then
+        game_stack[#game_stack]:keypressed(key, scancode, isrepeat)
+    end
 end
 
 function love.draw()
