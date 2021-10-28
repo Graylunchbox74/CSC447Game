@@ -114,6 +114,83 @@ function main_menu:draw()
     end
 end
 
+-- Inventory
+Inventory = {}
+
+function Inventory:new(capacity)
+    local o = {
+        capacity = capacity,
+        items = {}
+    }
+    setmetatable(o, { __index = Inventory })
+    return o
+end
+
+function Inventory:add_item(item_name, count)
+    if #self.items >= self.capacity then return false end
+
+    local existing = nil
+    for k, v in ipairs(self.items) do
+        if v.name == item_name then
+            existing = v
+        end
+    end
+
+    if existing then
+        existing.count = existing.count + count
+    else
+        table.insert(self.items, {
+            name = item_name,
+            count = count
+        })
+    end
+
+    return true
+end
+
+function Inventory:remove_item(item_name, count)
+    local existing = nil
+    local existing_idx = 0
+
+    for k, v in ipairs(self.items) do
+        if v.name == item_name then
+            existing = v
+            existing_idx = k
+            break
+        end
+    end
+
+    if existing then
+        if existing.count >= count then
+            existing.count = existing.count - count
+
+            if existing.count == 0 then
+                table.remove(self.items, existing_idx, 1)
+            end
+            return true
+        end
+    end
+
+    return false
+end
+
+Images_To_Load = {
+    { "standard_enemy", "assets/enemy_standard.png" },
+    { "player", "assets/player.png" },
+
+    { "water", "assets/water.png" },
+    { "grass", "assets/grass.png" },
+    { "brick", "assets/brick.png" },
+
+    { "flag",        "assets/flag.png" },
+    { "arrow_item",  "assets/arrow.png" },
+    { "sword_item",  "assets/sword.png" },
+    { "bow_item",    "assets/bow.png" },
+    { "key_item",    "assets/key.png" },
+    { "potion_item", "assets/potion.png" },
+    
+}
+images = {}
 
 game = {}
 function game:load()
@@ -129,29 +206,14 @@ function game:load()
         end
     end
 
-    self.standard_enemy_image = love.graphics.newImage("assets/enemy_standard.png")
-    self.standard_enemy_image:setFilter("nearest")
-    self.player_image = love.graphics.newImage("assets/player.png")
-    self.player_image:setFilter("nearest")
+    -- Load Images
+    for _, to_load in ipairs(Images_To_Load) do
+        local img = love.graphics.newImage(to_load[2])
+        img:setFilter("nearest")
 
-    self.water_image = love.graphics.newImage("assets/water.png")
-    self.water_image:setFilter("nearest")
-    self.grass_image = love.graphics.newImage("assets/grass.png")
-    self.grass_image:setFilter("nearest")
-    self.brick_image = love.graphics.newImage("assets/brick.png")
-    self.brick_image:setFilter("nearest")
-    self.arrow_image = love.graphics.newImage("assets/arrow.png")
-    self.arrow_image:setFilter("nearest")
-    self.bow_image   = love.graphics.newImage("assets/bow.png")
-    self.bow_image:setFilter("nearest")
-    self.flag_image  = love.graphics.newImage("assets/flag.png")
-    self.flag_image:setFilter("nearest")
-    self.key_image = love.graphics.newImage("assets/key.png")
-    self.key_image:setFilter("nearest")
-    self.potion_image = love.graphics.newImage("assets/potion.png")
-    self.potion_image:setFilter("nearest")
-    self.sword_image = love.graphics.newImage("assets/sword.png")
-    self.sword_image:setFilter("nearest")
+        images[to_load[1]] = img 
+    end
+
     self.oof = love.audio.newSource("assets/oof.mp3", "stream")
     self.d2 = love.audio.newSource("assets/D2BeyondLight.mp3", "stream")
 
@@ -174,27 +236,28 @@ function game:load()
         target_x = 5,
         target_y = 5,
 
-        items = {
-            potions = 0,
-            sword = 0,
-            bow = 0,
-            arrows = 0,
-            keys = 0
-        },
+        items = Inventory:new(5),
 
         health     = 7,
         max_health = 10,
 
-        current_action = "",
-        action_timer   = 0,
+        current_action     = "",
+        action_timer       = 0,
+        action_timer_delta = 1,
+
         queued_actions = {},
     }
+
+    self.player.items:add_item("potion", 2)
 end
 
 function can_walk_on(board, x, y)
     local cell = board[y + 1][x + 1]
     
-    return cell == "g"
+    if cell == "g" then return true, 1 end
+    if cell == "w" then return true, 0.5 end
+    
+    return false, 0
 end
 
 
@@ -207,7 +270,8 @@ function game:update(dt)
             local px = math.floor(self.player.x + 0.5)
             local py = math.floor(self.player.y + 0.5)
 
-            if can_walk_on(self.game_state, px + action[2], py + action[3]) then
+            local can_walk, speed = can_walk_on(self.game_state, px + action[2], py + action[3])
+            if can_walk then
                 self.player.start_x  = px
                 self.player.start_y  = py
                 self.player.target_x = px + action[2]
@@ -215,11 +279,12 @@ function game:update(dt)
                 self.player.current_action = action[1]
 
                 self.player.action_timer = 0
+                self.player.action_timer_delta = 3 * speed
             end
         end
     end
 
-    self.player.action_timer = self.player.action_timer + dt * 3
+    self.player.action_timer = self.player.action_timer + dt * self.player.action_timer_delta
     if self.player.action_timer > 1 then
         self.player.action_timer = 0
         self.player.current_action = ""
@@ -252,56 +317,56 @@ function game:draw()
     local square_size = self.wh/#self.game_state[1]
 
     love.graphics.setColor(1,1,1,1)
+    local image_map = {
+        w = images.water,
+        g = images.grass,
+        b = images.brick
+    }
     for y,row in ipairs(self.game_state) do
         for x,col in ipairs(row) do
-            local images = {
-                w = self.water_image,
-                g = self.grass_image,
-                b = self.brick_image
-            }
-            love.graphics.draw(images[col],(x - 1) * square_size,(y - 1) * square_size,0,square_size/16,square_size/16)
+            love.graphics.draw(image_map[col],(x - 1) * square_size,(y - 1) * square_size,0,square_size/16,square_size/16)
         end
     end
 
     --draw items on map
 
     --draw flag on map
-    love.graphics.draw(self.flag_image,self.flag.x * square_size,self.flag.y * square_size,0,square_size/self.flag_image:getWidth(), square_size/self.flag_image:getHeight())
+    love.graphics.draw(images.flag,self.flag.x * square_size,self.flag.y * square_size,0,square_size/16, square_size/16)
 
     love.graphics.setColor(1,1,1,1)
     --draw player / enemies
     for _,enemy in ipairs(self.enemies) do
-        love.graphics.draw(self.standard_enemy_image,0,0,0,square_size/self.standard_enemy_image:getWidth(), square_size/self.standard_enemy_image:getHeight())
+        love.graphics.draw(images.standard_enemy,0,0,0,square_size/16, square_size/16)
     end
 
-    love.graphics.draw(self.player_image,self.player.x * square_size,self.player.y * square_size,0,square_size/self.player_image:getWidth(), square_size/self.player_image:getHeight())
+    love.graphics.draw(images.player,self.player.x * square_size,self.player.y * square_size,0,square_size/16, square_size/16)
 
     --draw inventory
     local inventory_height = 0.1 * self.wh
     love.graphics.setColor(0,0,0,1)
     love.graphics.rectangle("fill", 0, self.wh - inventory_height, self.ww, inventory_height)
     local item_imgs = {
-        potions = self.potion_image,
-        sword = self.sword_image,
-        bow = self.bow_image,
-        arrows = self.arrow_image,
-        keys = self.key_image
+        potion  = images.potion_item,
+        sword   = images.sword_item,
+        bow     = images.bow_item,
+        arrow   = images.arrow_item,
+        key     = images.key_item,
     }
-    local i = 0
-    for item, amount in pairs(self.player.items) do
+
+    for i=0,self.player.items.capacity - 1 do
         love.graphics.setColor(0.4,0.4,0.4,1)
         love.graphics.rectangle("fill", i * (self.ww / 10) + 5, self.wh - inventory_height + 5, (self.ww / 10) - 10, inventory_height - 10)
+    end
 
-        --insert item that goes here if there is one
+    for i, item in ipairs(self.player.items.items) do
         love.graphics.setColor(1,1,1,1)
-        love.graphics.draw(item_imgs[item],
-            i * (self.ww / 10) + 15, self.wh - inventory_height + 5,
+        love.graphics.draw(item_imgs[item.name],
+            (i - 1) * (self.ww / 10) + 15, self.wh - inventory_height + 5,
             0,
             ((self.ww / 13) - 10) / 16, (inventory_height - 10) / 16)
 
-        love.graphics.print(tostring(amount), i * (self.ww / 10) + 7, self.wh - inventory_height + 7)
-
-        i = i + 1
+        --insert item that goes here if there is one
+        love.graphics.print(tostring(item.count), (i - 1) * (self.ww / 10) + 7, self.wh - inventory_height + 7)
     end
 
     --health bar
