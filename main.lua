@@ -118,31 +118,41 @@ end
 Inventory = {}
 
 function Inventory:new(capacity)
+    local items = {}
+    for i=1,capacity do table.insert(items, {}) end
+
     local o = {
         capacity = capacity,
-        items = {}
+        items = items
     }
     setmetatable(o, { __index = Inventory })
     return o
 end
 
 function Inventory:add_item(item_name, count)
-    if #self.items >= self.capacity then return false end
-
     local existing = nil
     for k, v in ipairs(self.items) do
         if v.name == item_name then
             existing = v
+            break
         end
     end
 
     if existing then
         existing.count = existing.count + count
     else
-        table.insert(self.items, {
-            name = item_name,
-            count = count
-        })
+        for k, v in ipairs(self.items) do
+            if v.name == nil then
+                self.items[k] = {
+                    name = item_name,
+                    count = count,
+                }
+
+                break
+            end
+        end
+        
+        return false
     end
 
     return true
@@ -165,8 +175,9 @@ function Inventory:remove_item(item_name, count)
             existing.count = existing.count - count
 
             if existing.count == 0 then
-                table.remove(self.items, existing_idx, 1)
+                self.items[existing_idx] = {}
             end
+
             return true
         end
     end
@@ -236,7 +247,10 @@ function game:load()
         target_x = 5,
         target_y = 5,
 
-        items = Inventory:new(5),
+        hotbar = Inventory:new(5),
+        selected_item = 1,
+
+        bag = Inventory:new(8),
 
         health     = 7,
         max_health = 10,
@@ -248,7 +262,10 @@ function game:load()
         queued_actions = {},
     }
 
-    self.player.items:add_item("potion", 2)
+    self.player.hotbar:add_item("potion", 2)
+    self.player.hotbar:add_item("key", 2)
+    self.player.hotbar:remove_item("potion", 2)
+    self.player.bag:add_item("potion", 10)
 end
 
 function can_walk_on(board, x, y)
@@ -308,6 +325,12 @@ function game:keypressed(key, scancode, isrepeat)
     if key == "right" then table.insert(self.player.queued_actions, { "move",  1,  0 }) end
     if key == "up"    then table.insert(self.player.queued_actions, { "move",  0, -1 }) end
     if key == "down"  then table.insert(self.player.queued_actions, { "move",  0,  1 }) end
+
+    if key == "1" then self.player.selected_item = 1 end
+    if key == "2" then self.player.selected_item = 2 end
+    if key == "3" then self.player.selected_item = 3 end
+    if key == "4" then self.player.selected_item = 4 end
+    if key == "5" then self.player.selected_item = 5 end
 end
 
 function game:draw()
@@ -353,20 +376,30 @@ function game:draw()
         key     = images.key_item,
     }
 
-    for i=0,self.player.items.capacity - 1 do
-        love.graphics.setColor(0.4,0.4,0.4,1)
+    local function drawItem(item, x, y)
+        if item.name ~= nil then
+            love.graphics.draw(item_imgs[item.name],
+                x, y,
+                0,
+                ((self.ww / 13) - 10) / 16, (inventory_height - 10) / 16)
+
+            --insert item that goes here if there is one
+            love.graphics.print(tostring(item.count), x - 4, y)
+        end
+    end
+
+    for i=0,self.player.hotbar.capacity - 1 do
+        if self.player.selected_item - 1 == i then
+            love.graphics.setColor(0.7,0.7,0.7,1)
+        else
+            love.graphics.setColor(0.4,0.4,0.4,1)
+        end
         love.graphics.rectangle("fill", i * (self.ww / 10) + 5, self.wh - inventory_height + 5, (self.ww / 10) - 10, inventory_height - 10)
     end
 
-    for i, item in ipairs(self.player.items.items) do
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.draw(item_imgs[item.name],
-            (i - 1) * (self.ww / 10) + 15, self.wh - inventory_height + 5,
-            0,
-            ((self.ww / 13) - 10) / 16, (inventory_height - 10) / 16)
-
-        --insert item that goes here if there is one
-        love.graphics.print(tostring(item.count), (i - 1) * (self.ww / 10) + 7, self.wh - inventory_height + 7)
+    love.graphics.setColor(1,1,1,1)
+    for i, item in ipairs(self.player.hotbar.items) do
+        drawItem(item, (i - 1) * (self.ww / 10) + 15, self.wh - inventory_height + 5)
     end
 
     --health bar
@@ -376,6 +409,21 @@ function game:draw()
     love.graphics.rectangle("fill", self.ww / 2 + 10, self.wh - inventory_height + 30, self.ww / 2 - 20, inventory_height - 40)
     love.graphics.setColor(0,1,0,1)
     love.graphics.rectangle("fill", self.ww / 2 + 10, self.wh-inventory_height + 30, (self.ww / 2 - 20) * (self.player["health"]/self.player.max_health), inventory_height - 40)
+
+    --side bar
+    local yoff = 0
+    love.graphics.setColor(0.4, 0.4, 0.4, 1)
+    for i=1,self.player.bag.capacity do
+        love.graphics.rectangle("fill", ((i - 1) % 2) * (self.ww / 10) + 15 + 12 * square_size, 12 + yoff, (self.ww / 10) - 10, inventory_height - 10)
+        if i % 2 == 0 then yoff = yoff + self.ww / 11 end
+    end
+
+    yoff = 0
+    love.graphics.setColor(1,1,1,1)
+    for i, item in ipairs(self.player.bag.items) do
+        drawItem(item, ((i - 1) % 2) * (self.ww / 10) + 25 + 12 * square_size, 12 + yoff)
+        if i % 2 == 0 then yoff = yoff + self.ww / 11 end
+    end
 end
 
 function love.load()
