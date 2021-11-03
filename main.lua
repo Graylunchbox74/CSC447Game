@@ -20,8 +20,8 @@
 --2. An issue with AI in games is that they are highly predictable, implement some randomness into your AI so the player can't always determine the next move
 --3. 
 
-
-
+-- local world_editor = require("lib.world_editor").world_editor
+-- local world_editor_menu = require("lib.world_editor").world_editor_menu
 
 function newButton(text, fn)
     return {
@@ -53,7 +53,7 @@ function main_menu:load()
 
      table.insert(self.buttons, newButton("Map Editor",
      function()
-        print("ello mate")
+        game_stack:push(world_editor_menu)
      end))
      
      table.insert(self.buttons, newButton("Exit",
@@ -539,3 +539,376 @@ end
 function love.draw()
     game_stack[#game_stack]:draw()
 end
+
+world_editor_menu = {}
+function world_editor_menu:load()
+    self.BUTTON_HEIGHT = 64
+    self.world_size = 16
+    self.load_game_file = ""
+    self.level_name = ""
+
+    self.wh = love.graphics.getHeight()
+    self.ww = love.graphics.getWidth()
+    love.graphics.setColor(0,0,0,1)
+    love.graphics.rectangle("fill",0,0,self.ww, self.wh)
+
+    self.load_level = false
+    self.new_level = false
+    self.options = {}
+    table.insert(self.options, newButton("Load Level",
+        function()
+            self.options = {}
+            self.load_level = true
+            table.insert(self.options, newButton("Load",
+            function()
+
+            end))
+            table.insert(self.options, newButton("Exit",
+            function()
+                love.event.quit()
+            end))
+            
+        end
+    ))
+    table.insert(self.options, newButton("New Level",
+        function()
+            self.new_level = true
+            self.options = {}
+            table.insert(self.options, newButton("Create Level",
+                function()
+                    game_stack:push(world_editor)
+                    -- world_editor.load()
+                    -- table.insert(game_stack, world_editor)
+                    
+                end
+            ))
+            table.insert(self.options, newButton("Exit",
+                function()
+                    love.event.quit()
+                end
+            ))
+        end
+    ))
+    table.insert(self.options, newButton("Exit",
+        function()
+            love.event.quit()
+        end
+    ))
+end
+
+function world_editor_menu:update()
+    return
+end
+
+function world_editor_menu:draw()
+    local mouse_x = 0
+    local mouse_y = 0
+    if self.new_level == false and self.load_level == false then
+        local button_width = self.ww * (1/3)
+        local margin = 16
+    
+        local total_height = (self.BUTTON_HEIGHT + margin) * #self.options
+        local cursor_y = 0
+    
+        for i, button in ipairs(self.options) do
+            local bx = (self.ww * 0.5) - (button_width * 0.5)
+            local by = (self.wh * 0.5) - (self.BUTTON_HEIGHT * 0.5) - (total_height * 0.5) + cursor_y
+    
+            local color = {0.4,0.4,0.5,1}
+    
+            --check mouse position--
+            local mx, my = love.mouse.getPosition()
+
+            if mx >= bx and my >= by and mx <= bx + button_width and my <= by + self.BUTTON_HEIGHT then
+                color = {0.5,0.4,0.4,1}
+                bn = love.mouse.isDown(1)
+                if bn and mx ~= mouse_x and my ~= mouse_y then
+                    mouse_x = mx
+                    mouse_y = my
+                    button.fn()
+                end
+            end
+
+            love.graphics.setColor(unpack(color))
+            love.graphics.rectangle("fill",
+             bx,
+             by,
+             button_width,
+             self.BUTTON_HEIGHT
+            )
+    
+            love.graphics.setColor(1,1,1,1)
+    
+            local textH = font:getHeight(button.text)
+            local textW = font:getWidth(button.text)
+    
+            love.graphics.print(
+                button.text,
+                font,
+                (self.ww * 0.5) - textW * 0.5,
+                by + textH * 0.5
+            )
+    
+            cursor_y = cursor_y + (self.BUTTON_HEIGHT + margin)
+    
+        end   
+    end
+    if self.new_level == true then
+        local labels = {
+            self.world_size,
+            self.level_name
+        }
+        local button_width = self.ww * (1/3)
+        local margin = 16
+    
+        local total_height = (self.BUTTON_HEIGHT + margin) * #self.options
+        local cursor_y = 0        
+        for _,label in ipairs(labels) do
+        end
+    
+        for i, button in ipairs(self.options) do
+            local bx = (self.ww * 0.5) - (button_width * 0.5)
+            local by = (self.wh * 0.5) - (self.BUTTON_HEIGHT * 0.5) - (total_height * 0.5) + cursor_y
+    
+            local color = {0.4,0.4,0.5,1}
+    
+            --check mouse position--
+            local mx, my = love.mouse.getPosition()
+
+            if mx >= bx and my >= by and mx <= bx + button_width and my <= by + self.BUTTON_HEIGHT then
+                color = {0.5,0.4,0.4,1}
+                bn = love.mouse.isDown(1)
+                if bn and mx ~= mouse_x and my ~= mouse_y then
+                    mouse_x = mx
+                    mouse_y = my
+                    button.fn()
+                end
+            end
+
+            love.graphics.setColor(unpack(color))
+            love.graphics.rectangle("fill",
+             bx,
+             by,
+             button_width,
+             self.BUTTON_HEIGHT
+            )
+    
+            love.graphics.setColor(1,1,1,1)
+    
+            local textH = font:getHeight(button.text)
+            local textW = font:getWidth(button.text)
+    
+            love.graphics.print(
+                button.text,
+                font,
+                (self.ww * 0.5) - textW * 0.5,
+                by + textH * 0.5
+            )
+    
+            cursor_y = cursor_y + (self.BUTTON_HEIGHT + margin)
+        end
+            
+    end
+    if self.load_level == true then
+    end
+end
+
+
+
+world_editor = {}
+function world_editor:load(world_size)
+    world_size = world_size or 16
+    self.wh = love.graphics.getHeight()
+    self.ww = love.graphics.getWidth()
+
+    self.world_map = {}
+    for i=1, world_size do
+        table.insert(self.world_map, {})
+        for x=1, world_size do
+            table.insert(self.world_map[i], 'w')
+        end
+    end
+
+    self.entity_map = {}
+    for i=1, world_size do
+        table.insert(self.entity_map, {})
+        for x=1, world_size do
+            table.insert(self.entity_map[i], 'n')
+        end
+    end
+
+    self.selected_placement = "grass"
+    self.placement_type = "tile"
+    self.square_size = self.wh/#self.world_map[1]
+    self.images = {}
+    for _, to_load in ipairs(Images_To_Load) do
+        local img = love.graphics.newImage(to_load[2])
+        img:setFilter("nearest")
+
+        self.images[to_load[1]] = img 
+    end
+
+    self.d2 = love.audio.newSource("assets/D2BeyondLight.mp3", "static")
+
+    self.tiles = {"w","b","g"}
+    self.tile_names = {
+        w="water",
+        b="wall",
+        g="grass"
+    }
+
+    self.entities = {"n", "p", "e", "b", "a", "f", "s"}
+    self.entity_names = {
+        n = "nothing",
+        p = "player",
+        e = "standard_enemy",
+        b = "bow_item",
+        a = "arrow_item",
+        f = "flag",
+        s = "sword_item",
+        o = "potion_item"
+    }
+    self.entity_limits = {
+        p = 1,
+        f = 1,
+        s = 1
+    }
+end
+
+function world_editor:update()
+    local tile_map = {
+        water="w",
+        grass="g",
+        wall="b"
+    }
+    local entity_string_map = {
+        nothing="n",
+        player="p",
+        standard_enemy="e",
+        bow_item="b",
+        arrow_item="a",
+        flag="f",
+        sword_item="s",
+        potion_item="o"
+    }
+    if love.mouse.isDown(1) then
+        local x = love.mouse.getX()
+        local y = love.mouse.getY()
+        --find the tile to replace if the mouse is in the tile area
+        if x <= self.square_size * #self.world_map[1] and y <= self.square_size * #self.world_map[1] and x > 0 and y > 0 then
+            local row = math.ceil(x / self.square_size)
+            local column = math.ceil(y / self.square_size)
+            if self.placement_type == "tile" then
+                if self.world_map[column][row] ~= tile_map[self.selected_placement] then
+
+                    self.world_map[column][row] = tile_map[self.selected_placement]
+                end
+            elseif self.placement_type == "entity" then
+                if self.entity_map[column][row] ~= entity_string_map[self.selected_placement] then
+                    if  self.entity_limits[entity_string_map[self.selected_placement]] ~= nil and self.entity_limits[entity_string_map[self.selected_placement]] > 0 then
+                        self.entity_map[column][row] = entity_string_map[self.selected_placement]
+                        self.entity_limits[entity_string_map[self.selected_placement]] = self.entity_limits[entity_string_map[self.selected_placement]] - 1
+                    elseif self.entity_limits[entity_string_map[self.selected_placement]] == nil then
+                        if self.entity_limits[self.entity_map[column][row]] ~= nil then
+                            self.entity_limits[self.entity_map[column][row]] = self.entity_limits[self.entity_map[column][row]] + 1
+                        end
+                        self.entity_map[column][row] = entity_string_map[self.selected_placement]
+                    end
+                end
+            end
+        end
+        --change the block type if mouse is in the inventory area
+    end
+end
+
+function world_editor:draw()
+    love.graphics.setColor(1,1,1,1)
+
+    local image_map = {
+        w = self.images.water,
+        g = self.images.grass,
+        b = self.images.brick
+    }
+
+    local entity_image_map = {
+        b = self.images.bow_item,
+        a = self.images.arrow_item,
+        p = self.images.player,
+        e = self.images.standard_enemy,
+        s = self.images.sword_item,
+        f = self.images.flag,
+        o = self.images.potion_item
+    }
+
+    local starting_x = self.square_size * #self.world_map[1] + 5
+    local starting_y = 15
+    --draw sidebar (should have the different tiles/items that can be placed)
+    local block_size = 16
+    for i,tile in ipairs(self.tiles) do
+        local x = starting_x
+        local y = (starting_y + block_size * (i-1)) + (15 * (i - 1))
+
+        local hover_x = starting_x - 5
+        local hover_y = y - 7.5
+        local max_hover_y = hover_y + block_size + 15 
+        local mouse_x = love.mouse.getX()
+        local mouse_y = love.mouse.getY()
+        if ( mouse_x > hover_x and mouse_x < self.ww and mouse_y > hover_y and mouse_y < max_hover_y ) or (self.selected_placement == self.tile_names[tile] and self.placement_type == "tile") then
+            love.graphics.setColor(0.5,0.5,0.5,0.25)
+            love.graphics.rectangle("fill", hover_x, hover_y, self.ww - hover_x, max_hover_y - hover_y)
+            love.graphics.setColor(1,1,1,1)
+            if love.mouse.isDown(1) then
+                self.selected_placement = self.tile_names[tile]
+                self.placement_type = "tile"
+            end
+        end
+
+
+        local block_end = (starting_y + block_size * (i))
+        love.graphics.draw(image_map[tile], x, y, 0, block_size/16, block_size/16)
+        love.graphics.print(self.tile_names[tile], x + block_size + 5, y + block_size/3)
+    end
+
+    for i, entity in ipairs(self.entities) do
+        local x = starting_x
+        local y = (starting_y + block_size * (i-1)) + (15 * (i - 1)) + ((starting_y + block_size * (#self.tiles-1)) + (15 * (#self.tiles - 1)) + 35)
+
+        local hover_x = starting_x - 5
+        local hover_y = y - 7.5
+        local max_hover_y = hover_y + block_size + 15 
+        local mouse_x = love.mouse.getX()
+        local mouse_y = love.mouse.getY()
+        if ( mouse_x > hover_x and mouse_x < self.ww and mouse_y > hover_y and mouse_y < max_hover_y ) or (self.selected_placement == self.entity_names[entity] and self.placement_type == "entity" ) then
+            love.graphics.setColor(0.5,0.5,0.5,0.25)
+            love.graphics.rectangle("fill", hover_x, hover_y, self.ww - hover_x, max_hover_y - hover_y)
+            love.graphics.setColor(1,1,1,1)
+            if love.mouse.isDown(1) then
+                self.selected_placement = self.entity_names[entity]
+                self.placement_type = "entity"
+            end
+        end
+
+
+        local block_end = (starting_y + block_size * (i))
+        if entity ~= "n" then
+            love.graphics.draw(entity_image_map[entity], x, y, 0, block_size/16, block_size/16)
+        end
+        love.graphics.print(self.entity_names[entity], x + block_size + 5, y + block_size/3)
+    end
+
+    --draw map
+    --draw items/enemies/player on map
+    for y,row in ipairs(self.world_map) do
+        for x,col in ipairs(row) do
+            love.graphics.draw(image_map[col],(x - 1) * self.square_size,(y - 1) * self.square_size,0,self.square_size/16,self.square_size/16)
+            if self.entity_map[y][x] ~= "n" then
+                love.graphics.draw(entity_image_map[self.entity_map[y][x]], (x - 1) * self.square_size,(y - 1) * self.square_size,0,self.square_size/16,self.square_size/16)
+            end
+        end
+    end 
+
+    
+
+
+end
+
