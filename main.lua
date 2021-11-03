@@ -148,7 +148,7 @@ function Inventory:add_item(item_name, count)
                     count = count,
                 }
 
-                break
+                return true
             end
         end
         
@@ -228,6 +228,7 @@ function game:load()
     self.oof = love.audio.newSource("assets/oof.mp3", "stream")
     self.d2 = love.audio.newSource("assets/D2BeyondLight.mp3", "stream")
 
+    self.sidebar_log = {}
 
     self.enemies = {
         {},
@@ -238,6 +239,8 @@ function game:load()
         y = 9
     }
 
+    self.projectiles = {}
+
     self.player = {
         x = 5,
         y = 5,
@@ -246,6 +249,9 @@ function game:load()
         start_y  = 5,
         target_x = 5,
         target_y = 5,
+
+        last_dx = 1,
+        last_dy = 0,
 
         hotbar = Inventory:new(5),
         selected_item = 1,
@@ -264,8 +270,10 @@ function game:load()
 
     self.player.hotbar:add_item("potion", 2)
     self.player.hotbar:add_item("key", 2)
-    self.player.hotbar:remove_item("potion", 2)
     self.player.bag:add_item("potion", 10)
+
+    self.player.hotbar:add_item("bow", 1)
+    self.player.bag:add_item("arrow", 5)
 end
 
 function can_walk_on(board, x, y)
@@ -277,8 +285,64 @@ function can_walk_on(board, x, y)
     return false, 0
 end
 
+function can_pass_over(board, x, y)
+    if x < 0 or y < 0 or x >= #board[1] or y >= #board then return false end
+    local cell = board[y + 1][x + 1]
+    
+    if cell == "b" then return false end
+    
+    return true
+end
+
+function game:log(msg)
+    if #self.sidebar_log > 5 then
+        table.remove(self.sidebar_log, 1, 1)
+    end
+
+    table.insert(self.sidebar_log, msg)
+end
+
+function game:use_item(item, player, enemy)
+    -- EITHER player OR enemy is set depending on if it was an enemy or player using the item
+    if player == nil then return end
+
+    if item.name == "bow" then
+        if player.hotbar:remove_item("arrow", 1) or player.bag:remove_item("arrow", 1) then
+            local dx = 0
+            local dy = 0
+            if player.last_dx > 0 then dx = 0.2 end
+            if player.last_dy > 0 then dy = 0.2 end
+            if player.last_dx < 0 then dx = -0.2 end
+            if player.last_dy < 0 then dy = -0.2 end
+
+            table.insert(self.projectiles, {
+                kind = "arrow",
+                img  = "arrow_item",
+                x  = player.start_x + player.last_dx,
+                y  = player.start_y + player.last_dy,
+                dx = dx,
+                dy = dy
+            })
+        end
+    end
+end
 
 function game:update(dt)
+    for _, proj in ipairs(self.projectiles) do
+        proj.x = proj.x + proj.dx
+        proj.y = proj.y + proj.dy
+
+        if not can_pass_over(self.game_state, math.floor(proj.x + 0.5), math.floor(proj.y + 0.5)) then
+            proj.dead = true
+        end
+    end
+
+    for proj_idx, proj in ipairs(self.projectiles) do
+        if proj.dead then
+            table.remove(self.projectiles, proj_idx, 1)
+        end
+    end
+
     if self.player.current_action == "" and #self.player.queued_actions > 0 then
         local action = self.player.queued_actions[1]
         table.remove(self.player.queued_actions, 1, 1)
@@ -293,10 +357,21 @@ function game:update(dt)
                 self.player.start_y  = py
                 self.player.target_x = px + action[2]
                 self.player.target_y = py + action[3]
+                self.player.last_dx = action[2]
+                self.player.last_dy = action[3]
                 self.player.current_action = action[1]
 
                 self.player.action_timer = 0
                 self.player.action_timer_delta = 3 * speed
+            end
+        end
+
+        if action[1] == "use_item" then
+            local item_to_use = self.player.hotbar.items[action[2]]
+            if item_to_use.name ~= nil then
+                self:use_item(item_to_use, self.player, nil)
+
+                self:log("Player used " .. item_to_use.name)
             end
         end
     end
@@ -331,6 +406,8 @@ function game:keypressed(key, scancode, isrepeat)
     if key == "3" then self.player.selected_item = 3 end
     if key == "4" then self.player.selected_item = 4 end
     if key == "5" then self.player.selected_item = 5 end
+
+    if key == "space" then table.insert(self.player.queued_actions, { "use_item", self.player.selected_item }) end
 end
 
 function game:draw()
@@ -352,6 +429,9 @@ function game:draw()
     end
 
     --draw items on map
+    for _, proj in ipairs(self.projectiles) do
+        love.graphics.draw(images[proj.img], proj.x * square_size, proj.y * square_size, 0, square_size/16, square_size/16)
+    end
 
     --draw flag on map
     love.graphics.draw(images.flag,self.flag.x * square_size,self.flag.y * square_size,0,square_size/16, square_size/16)
@@ -414,15 +494,25 @@ function game:draw()
     local yoff = 0
     love.graphics.setColor(0.4, 0.4, 0.4, 1)
     for i=1,self.player.bag.capacity do
-        love.graphics.rectangle("fill", ((i - 1) % 2) * (self.ww / 10) + 15 + 12 * square_size, 12 + yoff, (self.ww / 10) - 10, inventory_height - 10)
-        if i % 2 == 0 then yoff = yoff + self.ww / 11 end
+        love.graphics.rectangle("fill", ((i - 1) % 2) * (self.ww / 10) + 24 + 12 * square_size, 8 + yoff, (self.ww / 10) - 10, inventory_height - 10)
+        if i % 2 == 0 then yoff = yoff + inventory_height end
     end
 
     yoff = 0
     love.graphics.setColor(1,1,1,1)
     for i, item in ipairs(self.player.bag.items) do
-        drawItem(item, ((i - 1) % 2) * (self.ww / 10) + 25 + 12 * square_size, 12 + yoff)
-        if i % 2 == 0 then yoff = yoff + self.ww / 11 end
+        drawItem(item, ((i - 1) % 2) * (self.ww / 10) + 34 + 12 * square_size, 12 + yoff)
+        if i % 2 == 0 then yoff = yoff + inventory_height end
+    end
+    
+    yoff = yoff + 8
+    love.graphics.setColor(0.4, 0.4, 0.4, 1)
+    love.graphics.rectangle("fill", 12 * square_size, yoff, self.ww - 12 * square_size, self.wh - yoff - inventory_height)
+
+    love.graphics.setColor(1, 1, 1, 1)
+    for _, msg in ipairs(self.sidebar_log) do
+        love.graphics.print(msg, 12 * square_size + 8, yoff, 0)
+        yoff = yoff + 16
     end
 end
 
