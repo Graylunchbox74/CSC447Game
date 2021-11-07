@@ -14,7 +14,7 @@
 --if player steps on golden flag they win the level
 
 ----------------------------------------------------------------------------
-------------------------requirements for enemy AI---------------------------
+------------------------Requirements for Enemy AI---------------------------
 ----------------------------------------------------------------------------
 --1. AI should create a path from its current position to the player and use that path to move to the player
 --2. An issue with AI in games is that they are highly predictable, implement some randomness into your AI so the player can't always determine the next move
@@ -192,6 +192,7 @@ Images_To_Load = {
     { "water", "assets/water.png" },
     { "grass", "assets/grass.png" },
     { "brick", "assets/brick.png" },
+    { "door",  "assets/door.png"  },
 
     { "flag",        "assets/flag.png" },
     { "arrow_item",  "assets/arrow.png" },
@@ -273,10 +274,12 @@ function game:load()
     self.player.bag:add_item("potion", 10)
 
     self.player.hotbar:add_item("bow", 1)
+    self.player.hotbar:add_item("arrow", 5)
     self.player.bag:add_item("arrow", 5)
 end
 
 function can_walk_on(board, x, y)
+    if x < 0 or y < 0 or x >= #board[1] or y >= #board then return false end
     local cell = board[y + 1][x + 1]
     
     if cell == "g" then return true, 1 end
@@ -290,12 +293,13 @@ function can_pass_over(board, x, y)
     local cell = board[y + 1][x + 1]
     
     if cell == "b" then return false end
+    if cell == "d" then return false end
     
     return true
 end
 
 function game:log(msg)
-    if #self.sidebar_log > 5 then
+    if #self.sidebar_log > 17 then
         table.remove(self.sidebar_log, 1, 1)
     end
 
@@ -324,6 +328,11 @@ function game:use_item(item, player, enemy)
                 dy = dy
             })
         end
+    end
+
+    if item.name == "potion" then
+        player.hotbar:remove_item("potion", 1)
+        player.health = math.min(player.max_health, player.health + .2 * player.max_health)
     end
 end
 
@@ -418,13 +427,16 @@ function game:draw()
 
     love.graphics.setColor(1,1,1,1)
     local image_map = {
-        w = images.water,
-        g = images.grass,
-        b = images.brick
+        w = { images.water },
+        g = { images.grass },
+        b = { images.brick },
+        d = { images.grass, images.door },
     }
     for y,row in ipairs(self.game_state) do
         for x,col in ipairs(row) do
-            love.graphics.draw(image_map[col],(x - 1) * square_size,(y - 1) * square_size,0,square_size/16,square_size/16)
+            for _, img in ipairs(image_map[col]) do
+                love.graphics.draw(img, (x - 1) * square_size,(y - 1) * square_size,0,square_size/16,square_size/16)
+            end
         end
     end
 
@@ -456,12 +468,11 @@ function game:draw()
         key     = images.key_item,
     }
 
-    local function drawItem(item, x, y)
+    local function drawItem(item, x, y, w, h)
+        w = w or ((self.ww / 13) - 10)
+        h = h or (inventory_height - 10)
         if item.name ~= nil then
-            love.graphics.draw(item_imgs[item.name],
-                x, y,
-                0,
-                ((self.ww / 13) - 10) / 16, (inventory_height - 10) / 16)
+            love.graphics.draw(item_imgs[item.name], x, y, 0, w/16, h/16)
 
             --insert item that goes here if there is one
             love.graphics.print(tostring(item.count), x - 4, y)
@@ -501,7 +512,7 @@ function game:draw()
     yoff = 0
     love.graphics.setColor(1,1,1,1)
     for i, item in ipairs(self.player.bag.items) do
-        drawItem(item, ((i - 1) % 2) * (self.ww / 10) + 34 + 12 * square_size, 12 + yoff)
+        drawItem(item, ((i - 1) % 2) * (self.ww / 10) + 34 + 12 * square_size, 12 + yoff, (self.ww / 10) - 36, inventory_height - 20)
         if i % 2 == 0 then yoff = yoff + inventory_height end
     end
     
