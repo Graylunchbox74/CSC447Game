@@ -217,6 +217,14 @@ function game:load()
         end
     end
 
+    self.entity_map = {}
+    for line in love.filesystem.lines("level1.txt") do
+        table.insert(self.entity_map, {})
+        for i=1, #line do
+            table.insert(self.entity_map[#self.entity_map], line:sub(i,i))
+        end
+    end
+
     -- Load Images
     for _, to_load in ipairs(Images_To_Load) do
         local img = love.graphics.newImage(to_load[2])
