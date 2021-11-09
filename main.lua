@@ -298,12 +298,22 @@ function can_pass_over(board, x, y)
     return true
 end
 
+function facing_block(board, x, y, dx, dy)
+    if x + dx < 0 or y + dy < 0 or x + dx >= #board[1] or y + dy >= #board then return " " end
+    return board[y + dy + 1][x + dx + 1]
+end
+
 function game:log(msg)
     if #self.sidebar_log > 17 then
         table.remove(self.sidebar_log, 1, 1)
     end
 
     table.insert(self.sidebar_log, msg)
+end
+
+function game:set_block(x, y, block)
+    if x < 0 or y < 0 or x >= #self.game_state[1] or y >= #self.game_state then return end
+    self.game_state[y + 1][x + 1] = block
 end
 
 function game:use_item(item, player, enemy)
@@ -334,6 +344,13 @@ function game:use_item(item, player, enemy)
         player.hotbar:remove_item("potion", 1)
         player.health = math.min(player.max_health, player.health + .2 * player.max_health)
     end
+
+    if item.name == "key" then
+        local block = facing_block(self.game_state, player.target_x, player.target_y, player.last_dx, player.last_dy)
+        if block == "d" and player.hotbar:remove_item("key", 1) then
+            self:set_block(player.target_x + player.last_dx, player.target_y + player.last_dy, "g")
+        end
+    end
 end
 
 function game:update(dt)
@@ -361,13 +378,13 @@ function game:update(dt)
             local py = math.floor(self.player.y + 0.5)
 
             local can_walk, speed = can_walk_on(self.game_state, px + action[2], py + action[3])
+            self.player.last_dx = action[2]
+            self.player.last_dy = action[3]
             if can_walk then
                 self.player.start_x  = px
                 self.player.start_y  = py
                 self.player.target_x = px + action[2]
                 self.player.target_y = py + action[3]
-                self.player.last_dx = action[2]
-                self.player.last_dy = action[3]
                 self.player.current_action = action[1]
 
                 self.player.action_timer = 0
