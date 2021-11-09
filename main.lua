@@ -231,14 +231,6 @@ function game:load()
         end
     end
 
-    self.entity_map = {}
-    for line in love.filesystem.lines("level1.txt") do
-        table.insert(self.entity_map, {})
-        for i=1, #line do
-            table.insert(self.entity_map[#self.entity_map], line:sub(i,i))
-        end
-    end
-
     -- Load Images
     for _, to_load in ipairs(Images_To_Load) do
         local img = love.graphics.newImage(to_load[2])
@@ -282,13 +274,11 @@ function game:load()
         queued_actions = {},
     }
 
-    self.player.hotbar:add_item("potion", 2)
-    self.player.hotbar:add_item("key", 2)
-    self.player.bag:add_item("potion", 10)
+    self:add_item(4, 5, "key")
+    self:add_item(4, 6, "sword")
+end
 
-    self.player.hotbar:add_item("bow", 1)
-    self.player.hotbar:add_item("arrow", 5)
-    self.player.bag:add_item("arrow", 5)
+function game:load_level(level_name)
 end
 
 function can_walk_on(board, x, y)
@@ -335,6 +325,16 @@ function game:add_enemy(x, y)
     table.insert(self.entities, enemy)
 end
 
+function game:add_item(x, y, item_name)
+    local item = {
+        kind = "item",
+        x = x, y = y,
+        item_name = item_name,
+    }
+
+    table.insert(self.entities, item)
+end
+
 function game:set_block(x, y, block)
     if x < 0 or y < 0 or x >= #self.game_state[1] or y >= #self.game_state then return end
     self.game_state[y + 1][x + 1] = block
@@ -343,6 +343,22 @@ end
 function game:get_block(x, y)
     if x < 0 or y < 0 or x >= #self.game_state[1] or y >= #self.game_state then return " " end
     return self.game_state[y + 1][x + 1]
+end
+
+function game:get_entity_at(x, y, kind)
+    for _, ent in ipairs(self.entities) do
+        if math.floor(ent.x + 0.5) == x and math.floor(ent.y + 0.5) == y then
+            if kind ~= nil then
+                if ent.kind == kind then
+                    return ent
+                end
+            else
+                return ent
+            end
+        end
+    end
+
+    return nil
 end
 
 function game:use_item(item, player, enemy)
@@ -378,6 +394,19 @@ function game:use_item(item, player, enemy)
         local block = self:get_block(player.target_x + player.last_dx, player.target_y + player.last_dy)
         if block == "d" and player.hotbar:remove_item("key", 1) then
             self:set_block(player.target_x + player.last_dx, player.target_y + player.last_dy, "g")
+        end
+    end
+
+    if item.name == "sword" then
+        local tx = player.x + player.last_dx
+        local ty = player.y + player.last_dy
+        local target = self:get_entity_at(tx, ty)
+
+        if target ~= nil then
+            if target.kind == "enemy" then
+                love.audio.play(self.oof)
+            end
+            target.dead = true
         end
     end
 end
@@ -424,13 +453,19 @@ function game:update_entity(dt, ent)
 end
 
 function game:update(dt)
-
     for _, ent in ipairs(self.entities) do
         if ent.kind == "arrow" then
             ent.x = ent.x + ent.dx
             ent.y = ent.y + ent.dy
 
             if not can_pass_over(self.game_state, math.floor(ent.x + 0.5), math.floor(ent.y + 0.5)) then
+                ent.dead = true
+            end
+
+            local target = self:get_entity_at(math.floor(ent.x + 0.5), math.floor(ent.y + 0.5), "enemy")
+            if target ~= nil then
+                love.audio.play(self.oof)
+                target.dead = true
                 ent.dead = true
             end
         end
@@ -479,6 +514,12 @@ function game:update(dt)
         if block == "f" then
             self:win()
         end
+
+        local item = self:get_entity_at(self.player.x, self.player.y, "item")
+        if item ~= nil then
+            item.dead = true
+            self.player.hotbar:add_item(item.item_name, 1)
+        end
     end
 end
 
@@ -505,7 +546,7 @@ function game:keypressed(key, scancode, isrepeat)
 end
 
 function game:draw()
-	love.audio.play( self.d2 )
+	-- love.audio.play( self.d2 )
 
     -- Draw map
     local square_size = self.wh/#self.game_state[1]
@@ -526,6 +567,14 @@ function game:draw()
         end
     end
 
+    local item_imgs = {
+        potion  = images.potion_item,
+        sword   = images.sword_item,
+        bow     = images.bow_item,
+        arrow   = images.arrow_item,
+        key     = images.key_item,
+    }
+
     -- Draw items on map
     love.graphics.setColor(1,1,1,1)
     for _, ent in ipairs(self.entities) do
@@ -536,6 +585,10 @@ function game:draw()
         if ent.kind == "enemy" then
             love.graphics.draw(images.standard_enemy, ent.x * square_size, ent.y * square_size, 0, square_size/16, square_size/16)
         end
+
+        if ent.kind == "item" then
+            love.graphics.draw(item_imgs[ent.item_name], ent.x * square_size, ent.y * square_size, 0, square_size/16, square_size/16)
+        end
     end
 
     love.graphics.draw(images.player,self.player.x * square_size,self.player.y * square_size,0,square_size/16, square_size/16)
@@ -544,14 +597,6 @@ function game:draw()
     local inventory_height = 0.1 * self.wh
     love.graphics.setColor(0,0,0,1)
     love.graphics.rectangle("fill", 0, self.wh - inventory_height, self.ww, inventory_height)
-    local item_imgs = {
-        potion  = images.potion_item,
-        sword   = images.sword_item,
-        bow     = images.bow_item,
-        arrow   = images.arrow_item,
-        key     = images.key_item,
-    }
-
     local function drawItem(item, x, y, w, h)
         w = w or ((self.ww / 13) - 10)
         h = h or (inventory_height - 10)
