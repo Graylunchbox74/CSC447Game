@@ -32,6 +32,8 @@
 
 
 
+local enemy_action = require "enemy"
+
 last_mouse_down = false
 function newButton(text, fn)
     return {
@@ -250,11 +252,8 @@ function game:load()
 
     self.sidebar_log = {}
 
-    self.enemies = {
-        {},
-    }
-
-    self.projectiles = {}
+    self.entities = {}
+	self:add_enemy(1, 1)
 
     self.player = {
         x = 5,
@@ -321,6 +320,21 @@ function game:log(msg)
     table.insert(self.sidebar_log, msg)
 end
 
+function game:add_enemy(x, y)
+    local enemy = {
+        kind = "enemy",
+        x = x, y = y,
+        start_x = x, start_y = y,
+        target_x = x, target_y = y,
+
+        current_action     = "",
+        action_timer       = 0,
+        action_timer_delta = 1,
+    }
+
+    table.insert(self.entities, enemy)
+end
+
 function game:set_block(x, y, block)
     if x < 0 or y < 0 or x >= #self.game_state[1] or y >= #self.game_state then return end
     self.game_state[y + 1][x + 1] = block
@@ -344,7 +358,7 @@ function game:use_item(item, player, enemy)
             if player.last_dx < 0 then dx = -0.2 end
             if player.last_dy < 0 then dy = -0.2 end
 
-            table.insert(self.projectiles, {
+            table.insert(self.entities, {
                 kind = "arrow",
                 img  = "arrow_item",
                 x  = player.start_x + player.last_dx,
@@ -368,19 +382,75 @@ function game:use_item(item, player, enemy)
     end
 end
 
-function game:update(dt)
-    for _, proj in ipairs(self.projectiles) do
-        proj.x = proj.x + proj.dx
-        proj.y = proj.y + proj.dy
+function game:check_move_action(ent, action)
+    if action[1] ~= "move" then return end
 
-        if not can_pass_over(self.game_state, math.floor(proj.x + 0.5), math.floor(proj.y + 0.5)) then
-            proj.dead = true
+    local px = math.floor(ent.x + 0.5)
+    local py = math.floor(ent.y + 0.5)
+
+    local dx = math.min(1, math.max(-1, action[2]))
+    local dy = math.min(1, math.max(-1, action[3]))
+    local can_walk, speed = can_walk_on(self.game_state, px + dx, py + dy)
+    ent.last_dx = dx
+    ent.last_dy = dy
+    if can_walk then
+        ent.start_x  = px
+        ent.start_y  = py
+        ent.target_x = px + dx
+        ent.target_y = py + dy
+        ent.current_action = action[1]
+
+        ent.action_timer = 0
+        ent.action_timer_delta = 3 * speed
+    end
+end
+
+function game:update_entity(dt, ent)
+    ent.action_timer = ent.action_timer + dt * ent.action_timer_delta
+    if ent.action_timer > 1 then
+        ent.action_timer = 0
+        ent.action_timer_delta = 0
+        ent.current_action = ""
+
+        ent.x = ent.target_x
+        ent.y = ent.target_y
+    end
+
+    if ent.current_action == "move" then
+        local t = ent.action_timer
+        ent.x = t * ent.target_x + (1 - t) * ent.start_x
+        ent.y = t * ent.target_y + (1 - t) * ent.start_y
+    end
+end
+
+function game:update(dt)
+
+    for _, ent in ipairs(self.entities) do
+        if ent.kind == "arrow" then
+            ent.x = ent.x + ent.dx
+            ent.y = ent.y + ent.dy
+
+            if not can_pass_over(self.game_state, math.floor(ent.x + 0.5), math.floor(ent.y + 0.5)) then
+                ent.dead = true
+            end
+        end
+
+        if ent.kind == "enemy" then
+            if ent.current_action == "" then
+                local action = enemy_action(ent, self.player, self.game_state, self.entities)
+
+                if action[1] == "move" then
+                    self:check_move_action(ent, action)
+                end
+            end
+
+            self:update_entity(dt, ent)
         end
     end
 
-    for proj_idx, proj in ipairs(self.projectiles) do
-        if proj.dead then
-            table.remove(self.projectiles, proj_idx, 1)
+    for ent_idx, ent in ipairs(self.entities) do
+        if ent.dead then
+            table.remove(self.entities, ent_idx, 1)
         end
     end
 
@@ -389,22 +459,7 @@ function game:update(dt)
         table.remove(self.player.queued_actions, 1, 1)
 
         if action[1] == "move" then
-            local px = math.floor(self.player.x + 0.5)
-            local py = math.floor(self.player.y + 0.5)
-
-            local can_walk, speed = can_walk_on(self.game_state, px + action[2], py + action[3])
-            self.player.last_dx = action[2]
-            self.player.last_dy = action[3]
-            if can_walk then
-                self.player.start_x  = px
-                self.player.start_y  = py
-                self.player.target_x = px + action[2]
-                self.player.target_y = py + action[3]
-                self.player.current_action = action[1]
-
-                self.player.action_timer = 0
-                self.player.action_timer_delta = 3 * speed
-            end
+            self:check_move_action(self.player, action)
         end
 
         if action[1] == "use_item" then
@@ -417,25 +472,13 @@ function game:update(dt)
         end
     end
 
-    self.player.action_timer = self.player.action_timer + dt * self.player.action_timer_delta
-    if self.player.action_timer > 1 then
-        self.player.action_timer = 0
-        self.player.action_timer_delta = 0
-        self.player.current_action = ""
+    self:update_entity(dt, self.player)
 
-        self.player.x = self.player.target_x
-        self.player.y = self.player.target_y
-
+    if self.player.action_timer == 0 then
         local block = self:get_block(self.player.x, self.player.y)
         if block == "f" then
             self:win()
         end
-    end
-
-    if self.player.current_action == "move" then
-        local t = self.player.action_timer
-        self.player.x = t * self.player.target_x + (1 - t) * self.player.start_x
-        self.player.y = t * self.player.target_y + (1 - t) * self.player.start_y
     end
 end
 
@@ -484,14 +527,15 @@ function game:draw()
     end
 
     -- Draw items on map
-    for _, proj in ipairs(self.projectiles) do
-        love.graphics.draw(images[proj.img], proj.x * square_size, proj.y * square_size, 0, square_size/16, square_size/16)
-    end
-
     love.graphics.setColor(1,1,1,1)
-    --draw player / enemies
-    for _,enemy in ipairs(self.enemies) do
-        love.graphics.draw(images.standard_enemy,0,0,0,square_size/16, square_size/16)
+    for _, ent in ipairs(self.entities) do
+        if ent.kind == "arrow" then
+            love.graphics.draw(images[ent.img], ent.x * square_size, ent.y * square_size, 0, square_size/16, square_size/16)
+        end
+
+        if ent.kind == "enemy" then
+            love.graphics.draw(images.standard_enemy, ent.x * square_size, ent.y * square_size, 0, square_size/16, square_size/16)
+        end
     end
 
     love.graphics.draw(images.player,self.player.x * square_size,self.player.y * square_size,0,square_size/16, square_size/16)
@@ -594,8 +638,6 @@ level_end_menu = {}
 function level_end_menu:load(game, msg)
     self.game = game
     self.msg = msg
-
-    self.font = love.graphics.newFont(36)
 end
 
 function level_end_menu:update(dt)
@@ -613,14 +655,16 @@ function level_end_menu:draw()
 
     local wh = love.graphics.getHeight()
     local ww = love.graphics.getWidth()
-    love.graphics.setColor(0, 0, 0, 0.3)
+    love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.rectangle("fill", 0, 0, ww, wh)
 
     local old_font = love.graphics.getFont()
-    love.graphics.setFont(self.font)
+    love.graphics.setFont(font)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.printf(self.msg, 0, 200, ww / 2, "center", 0, 2, 2)
     love.graphics.setFont(old_font)
+
+    love.graphics.printf("Press SPACE to return to the main menu", 0, 300, ww, "center")
 end
 
 world_editor_menu = {}
@@ -820,8 +864,6 @@ function world_editor:load(world_size)
 
         self.images[to_load[1]] = img 
     end
-
-    self.d2 = love.audio.newSource("assets/D2BeyondLight.mp3", "static")
 
     self.tiles = {"w","b","g","d","f"}
     self.tile_names = {
