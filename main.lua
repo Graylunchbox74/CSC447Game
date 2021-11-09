@@ -31,8 +31,8 @@ function newButton(text, fn)
 end
 
 local game_stack = {}
-function game_stack:push(item)
-    if item.load then item:load() end
+function game_stack:push(item, ...)
+    if item.load then item:load(...) end
     table.insert(self, item)
 end
 
@@ -193,8 +193,8 @@ Images_To_Load = {
     { "grass", "assets/grass.png" },
     { "brick", "assets/brick.png" },
     { "door",  "assets/door.png"  },
+    { "flag",  "assets/flag.png"  },
 
-    { "flag",        "assets/flag.png" },
     { "arrow_item",  "assets/arrow.png" },
     { "sword_item",  "assets/sword.png" },
     { "bow_item",    "assets/bow.png" },
@@ -233,11 +233,6 @@ function game:load()
 
     self.enemies = {
         {},
-    }
-
-    self.flag = {
-        x = 6,
-        y = 9
     }
 
     self.projectiles = {}
@@ -283,6 +278,7 @@ function can_walk_on(board, x, y)
     local cell = board[y + 1][x + 1]
     
     if cell == "g" then return true, 1 end
+    if cell == "f" then return true, 1 end
     if cell == "w" then return true, 0.5 end
     
     return false, 0
@@ -298,11 +294,6 @@ function can_pass_over(board, x, y)
     return true
 end
 
-function facing_block(board, x, y, dx, dy)
-    if x + dx < 0 or y + dy < 0 or x + dx >= #board[1] or y + dy >= #board then return " " end
-    return board[y + dy + 1][x + dx + 1]
-end
-
 function game:log(msg)
     if #self.sidebar_log > 17 then
         table.remove(self.sidebar_log, 1, 1)
@@ -314,6 +305,11 @@ end
 function game:set_block(x, y, block)
     if x < 0 or y < 0 or x >= #self.game_state[1] or y >= #self.game_state then return end
     self.game_state[y + 1][x + 1] = block
+end
+
+function game:get_block(x, y)
+    if x < 0 or y < 0 or x >= #self.game_state[1] or y >= #self.game_state then return " " end
+    return self.game_state[y + 1][x + 1]
 end
 
 function game:use_item(item, player, enemy)
@@ -346,7 +342,7 @@ function game:use_item(item, player, enemy)
     end
 
     if item.name == "key" then
-        local block = facing_block(self.game_state, player.target_x, player.target_y, player.last_dx, player.last_dy)
+        local block = self:get_block(player.target_x + player.last_dx, player.target_y + player.last_dy)
         if block == "d" and player.hotbar:remove_item("key", 1) then
             self:set_block(player.target_x + player.last_dx, player.target_y + player.last_dy, "g")
         end
@@ -405,10 +401,16 @@ function game:update(dt)
     self.player.action_timer = self.player.action_timer + dt * self.player.action_timer_delta
     if self.player.action_timer > 1 then
         self.player.action_timer = 0
+        self.player.action_timer_delta = 0
         self.player.current_action = ""
 
         self.player.x = self.player.target_x
         self.player.y = self.player.target_y
+
+        local block = self:get_block(self.player.x, self.player.y)
+        if block == "f" then
+            self:win()
+        end
     end
 
     if self.player.current_action == "move" then
@@ -416,6 +418,10 @@ function game:update(dt)
         self.player.x = t * self.player.target_x + (1 - t) * self.player.start_x
         self.player.y = t * self.player.target_y + (1 - t) * self.player.start_y
     end
+end
+
+function game:win()
+    game_stack:push(level_end_menu, self, "You Won!")
 end
 
 function game:keypressed(key, scancode, isrepeat)
@@ -439,7 +445,7 @@ end
 function game:draw()
 	--love.audio.play( self.d2 )
 
-    --draw map
+    -- Draw map
     local square_size = self.wh/#self.game_state[1]
 
     love.graphics.setColor(1,1,1,1)
@@ -448,6 +454,7 @@ function game:draw()
         g = { images.grass },
         b = { images.brick },
         d = { images.grass, images.door },
+        f = { images.grass, images.flag },
     }
     for y,row in ipairs(self.game_state) do
         for x,col in ipairs(row) do
@@ -457,13 +464,10 @@ function game:draw()
         end
     end
 
-    --draw items on map
+    -- Draw items on map
     for _, proj in ipairs(self.projectiles) do
         love.graphics.draw(images[proj.img], proj.x * square_size, proj.y * square_size, 0, square_size/16, square_size/16)
     end
-
-    --draw flag on map
-    love.graphics.draw(images.flag,self.flag.x * square_size,self.flag.y * square_size,0,square_size/16, square_size/16)
 
     love.graphics.setColor(1,1,1,1)
     --draw player / enemies
@@ -473,7 +477,7 @@ function game:draw()
 
     love.graphics.draw(images.player,self.player.x * square_size,self.player.y * square_size,0,square_size/16, square_size/16)
 
-    --draw inventory
+    -- Draw hotbar
     local inventory_height = 0.1 * self.wh
     love.graphics.setColor(0,0,0,1)
     love.graphics.rectangle("fill", 0, self.wh - inventory_height, self.ww, inventory_height)
@@ -497,12 +501,23 @@ function game:draw()
     end
 
     for i=0,self.player.hotbar.capacity - 1 do
+        local x = i * (self.ww / 10) + 5
+        local y = self.wh - inventory_height + 5
+        local w = (self.ww / 10) - 10
+        local h = inventory_height - 10
+
         if self.player.selected_item - 1 == i then
             love.graphics.setColor(0.7,0.7,0.7,1)
         else
-            love.graphics.setColor(0.4,0.4,0.4,1)
+            local mx, my = love.mouse.getPosition()
+            if x <= mx and y <= my and x + w >= mx and y + h >= my then
+                love.graphics.setColor(0.6,0.6,0.6,1)
+            else
+                love.graphics.setColor(0.4,0.4,0.4,1)
+            end
         end
-        love.graphics.rectangle("fill", i * (self.ww / 10) + 5, self.wh - inventory_height + 5, (self.ww / 10) - 10, inventory_height - 10)
+
+        love.graphics.rectangle("fill", x, y, w, h)
     end
 
     love.graphics.setColor(1,1,1,1)
@@ -510,7 +525,7 @@ function game:draw()
         drawItem(item, (i - 1) * (self.ww / 10) + 15, self.wh - inventory_height + 5)
     end
 
-    --health bar
+    -- Health bar
     love.graphics.setColor(1,1,1,1)
     love.graphics.print("Health:", self.ww / 2 + 10, self.wh - inventory_height + 10)
     love.graphics.setColor(1,0,0,1)
@@ -518,11 +533,23 @@ function game:draw()
     love.graphics.setColor(0,1,0,1)
     love.graphics.rectangle("fill", self.ww / 2 + 10, self.wh-inventory_height + 30, (self.ww / 2 - 20) * (self.player["health"]/self.player.max_health), inventory_height - 40)
 
-    --side bar
+    -- Side bar
     local yoff = 0
-    love.graphics.setColor(0.4, 0.4, 0.4, 1)
     for i=1,self.player.bag.capacity do
-        love.graphics.rectangle("fill", ((i - 1) % 2) * (self.ww / 10) + 24 + 12 * square_size, 8 + yoff, (self.ww / 10) - 10, inventory_height - 10)
+        local x = ((i - 1) % 2) * (self.ww / 10) + 24 + 12 * square_size
+        local y = 8 + yoff
+        local w = (self.ww / 10) - 10
+        local h = inventory_height - 10
+
+        local mx, my = love.mouse.getPosition()
+        if x <= mx and y <= my and x + w >= mx and y + h >= my then
+            love.graphics.setColor(0.6, 0.6, 0.6, 1)
+        else
+            love.graphics.setColor(0.4, 0.4, 0.4, 1)
+        end
+
+        love.graphics.rectangle("fill", x, y, w, h)
+
         if i % 2 == 0 then yoff = yoff + inventory_height end
     end
 
@@ -544,28 +571,37 @@ function game:draw()
     end
 end
 
-function love.load()
-    game_stack:push(main_menu)
+level_end_menu = {}
+function level_end_menu:load(game, msg)
+    self.game = game
+    self.msg = msg
+
+    self.font = love.graphics.newFont(36)
 end
 
-function love.update(dt)
-    if love.keyboard.isDown "escape" then
-        love.event.quit()
-    end
-
-    if game_stack[#game_stack].update then
-        game_stack[#game_stack]:update(dt)
-    end
+function level_end_menu:update(dt)
 end
 
-function love.keypressed(key, scancode, isrepeat)
-    if game_stack[#game_stack].keypressed then
-        game_stack[#game_stack]:keypressed(key, scancode, isrepeat)
+function level_end_menu:keypressed(key)
+    if key == "space" then
+        game_stack:pop()
+        game_stack:pop()
     end
 end
 
-function love.draw()
-    game_stack[#game_stack]:draw()
+function level_end_menu:draw()
+    self.game:draw()
+
+    local wh = love.graphics.getHeight()
+    local ww = love.graphics.getWidth()
+    love.graphics.setColor(0, 0, 0, 0.3)
+    love.graphics.rectangle("fill", 0, 0, ww, wh)
+
+    local old_font = love.graphics.getFont()
+    love.graphics.setFont(self.font)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf(self.msg, 0, 200, ww / 2, "center", 0, 2, 2)
+    love.graphics.setFont(old_font)
 end
 
 world_editor_menu = {}
@@ -778,23 +814,25 @@ function world_editor:load(world_size)
 
     self.d2 = love.audio.newSource("assets/D2BeyondLight.mp3", "static")
 
-    self.tiles = {"w","b","g"}
+    self.tiles = {"w","b","g","d","f"}
     self.tile_names = {
         w="water",
         b="wall",
-        g="grass"
+        g="grass",
+        d="door",
+        f="flag",
     }
 
-    self.entities = {"n", "p", "e", "b", "a", "f", "s"}
+    self.entities = {"n", "p", "e", "b", "a", "s","k"}
     self.entity_names = {
         n = "nothing",
         p = "player",
         e = "standard_enemy",
         b = "bow_item",
         a = "arrow_item",
-        f = "flag",
         s = "sword_item",
-        o = "potion_item"
+        o = "potion_item",
+        k = "key_item",
     }
     self.entity_limits = {
         p = 1,
@@ -807,7 +845,9 @@ function world_editor:update()
     local tile_map = {
         water="w",
         grass="g",
-        wall="b"
+        wall="b",
+        door="d",
+        flag="f",
     }
     local entity_string_map = {
         nothing="n",
@@ -815,9 +855,9 @@ function world_editor:update()
         standard_enemy="e",
         bow_item="b",
         arrow_item="a",
-        flag="f",
         sword_item="s",
-        potion_item="o"
+        potion_item="o",
+        key_item="k",
     }
     if love.mouse.isDown(1) then
         local x = love.mouse.getX()
@@ -853,9 +893,11 @@ function world_editor:draw()
     love.graphics.setColor(1,1,1,1)
 
     local image_map = {
-        w = self.images.water,
-        g = self.images.grass,
-        b = self.images.brick
+        w = { self.images.water                    },
+        g = { self.images.grass                    },
+        b = { self.images.brick                    },
+        d = { self.images.door,  self.images.grass },
+        f = { self.images.flag,  self.images.grass },
     }
 
     local entity_image_map = {
@@ -864,8 +906,8 @@ function world_editor:draw()
         p = self.images.player,
         e = self.images.standard_enemy,
         s = self.images.sword_item,
-        f = self.images.flag,
-        o = self.images.potion_item
+        o = self.images.potion_item,
+        k = self.images.key_item
     }
 
     local starting_x = self.square_size * #self.world_map[1] + 5
@@ -893,7 +935,7 @@ function world_editor:draw()
 
 
         local block_end = (starting_y + block_size * (i))
-        love.graphics.draw(image_map[tile], x, y, 0, block_size/16, block_size/16)
+        love.graphics.draw(image_map[tile][1], x, y, 0, block_size/16, block_size/16)
         love.graphics.print(self.tile_names[tile], x + block_size + 5, y + block_size/3)
     end
 
@@ -928,15 +970,38 @@ function world_editor:draw()
     --draw items/enemies/player on map
     for y,row in ipairs(self.world_map) do
         for x,col in ipairs(row) do
-            love.graphics.draw(image_map[col],(x - 1) * self.square_size,(y - 1) * self.square_size,0,self.square_size/16,self.square_size/16)
+            for i=#image_map[col],1,-1 do
+                love.graphics.draw(image_map[col][i],(x - 1) * self.square_size,(y - 1) * self.square_size,0,self.square_size/16,self.square_size/16)
+            end
+
             if self.entity_map[y][x] ~= "n" then
                 love.graphics.draw(entity_image_map[self.entity_map[y][x]], (x - 1) * self.square_size,(y - 1) * self.square_size,0,self.square_size/16,self.square_size/16)
             end
         end
     end 
-
-    
-
-
 end
 
+
+function love.load()
+    game_stack:push(main_menu)
+end
+
+function love.update(dt)
+    if love.keyboard.isDown "escape" then
+        love.event.quit()
+    end
+
+    if game_stack[#game_stack].update then
+        game_stack[#game_stack]:update(dt)
+    end
+end
+
+function love.keypressed(key, scancode, isrepeat)
+    if game_stack[#game_stack].keypressed then
+        game_stack[#game_stack]:keypressed(key, scancode, isrepeat)
+    end
+end
+
+function love.draw()
+    game_stack[#game_stack]:draw()
+end
