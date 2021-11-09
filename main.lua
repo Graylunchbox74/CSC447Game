@@ -4,6 +4,33 @@
 --1. AI should create a path from its current position to the player and use that path to move to the player
     --1a. Try to make the AI choose an efficient path, remember that water takes twice as long to walk through as grass
 --2. An issue with AI in games is that they are highly predictable, implement some randomness into your AI so the player can't always determine the next move
+--3. The goal of the enemy is to kill the player before the player can reach the flag
+
+
+
+
+--Extra Credit Opportunity
+
+--We will use this game for future classes and just built it in the past two weeks on our free time, so its not very good
+--
+--1. Bug finding, find a bug in the game and submit it as an issue on Github (there are plenty of bugs)
+--2. Make the code look readable, we didn't put much time into the code being efficient, readable or reliable, make some fixes and submit on github as a pull request
+--  a. even commenting the code works for this (although reading our code might be gross)
+--3. Make some additions to the game, be creative and make the game cool (only rule is that enemies must be able to be fully controlled by the enemy.lua file)
+
+----------------------------------------------------------------------------------
+------------------------Ideas for additions to the game---------------------------
+----------------------------------------------------------------------------------
+--1. More items
+--2. Respawning Enemies
+--3. Different types of enemies
+--4. Different tiles that have unique properties
+--the possibilities are endless
+
+
+
+
+
 
 last_mouse_down = false
 function newButton(text, fn)
