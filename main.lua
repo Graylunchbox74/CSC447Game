@@ -176,7 +176,7 @@ Images_To_Load = {
     { "water", "assets/water.png" },
     { "grass", "assets/grass.png" },
     { "brick", "assets/brick.png" },
-    { "door",  "assets/door.png"  },
+    { "door",  "assets/door2.png"  },
     { "flag",  "assets/flag.png"  },
 
     { "arrow_item",  "assets/arrow.png" },
@@ -435,7 +435,7 @@ function game:keypressed(key, scancode, isrepeat)
 end
 
 function game:draw()
-	--love.audio.play( self.d2 )
+	love.audio.play( self.d2 )
 
     -- Draw map
     local square_size = self.wh/#self.game_state[1]
@@ -611,21 +611,6 @@ function world_editor_menu:load()
     self.load_level = false
     self.new_level = false
     self.options = {}
-    table.insert(self.options, newButton("Load Level",
-        function()
-            self.options = {}
-            self.load_level = true
-            table.insert(self.options, newButton("Load",
-            function()
-
-            end))
-            table.insert(self.options, newButton("Exit",
-            function()
-                love.event.quit()
-            end))
-            
-        end
-    ))
     table.insert(self.options, newButton("New Level",
         function()
             self.new_level = true
@@ -909,6 +894,7 @@ function world_editor:draw()
 
     local starting_x = self.square_size * #self.world_map[1] + 5
     local starting_y = 15
+    local ending_y = start_y
     --draw sidebar (should have the different tiles/items that can be placed)
     local block_size = 16
     for i,tile in ipairs(self.tiles) do
@@ -961,6 +947,7 @@ function world_editor:draw()
             love.graphics.draw(entity_image_map[entity], x, y, 0, block_size/16, block_size/16)
         end
         love.graphics.print(self.entity_names[entity], x + block_size + 5, y + block_size/3)
+        ending_y = max_hover_y
     end
 
     --draw map
@@ -976,6 +963,69 @@ function world_editor:draw()
             end
         end
     end 
+
+
+    --draw save and exit options
+    --save option
+    local curr_y = ending_y
+    love.graphics.setColor(0.25,0.25,0.25,1)
+    love.graphics.rectangle("fill", starting_x, ending_y, self.ww - starting_x, 20)
+    love.graphics.setColor(1,1,1,1)
+    curr_y = curr_y + 20
+    love.graphics.print("Save", starting_x, curr_y + 15)
+    mx = love.mouse.getX()
+    my = love.mouse.getY()
+    if mx >= starting_x and mx <= self.ww and my <= curr_y + 23.5 and my >= curr_y + 10 then
+        bn = love.mouse.isDown(1)
+        love.graphics.setColor(0.5,0.5,0.5,0.5)
+        love.graphics.rectangle("fill", starting_x, curr_y + 10, self.ww - starting_x, 23.5)
+        if not bn and last_mouse_down then
+            --create string to print
+            world_map_string = ""
+            for y,row in ipairs(self.world_map) do
+                for x,col in ipairs(row) do
+                    world_map_string = world_map_string .. self.world_map[y][x]
+                end
+                world_map_string = world_map_string .. "\r\n"
+            end
+            
+            world_map_string = world_map_string .. "\r\n"
+
+            for y,row in ipairs(self.entity_map) do
+                for x,col in ipairs(row) do
+                    world_map_string = world_map_string .. self.entity_map[y][x]
+                end
+                world_map_string = world_map_string .. "\r\n"                
+            end
+            local file = io.open("./custom_level.txt", "wb")
+            file:write(world_map_string)
+            file:close()
+            -- local success, message =love.filesystem.write("./custom_level.txt", world_map_string)
+
+        end
+        last_mouse_down = bn
+    end
+
+    curr_y = curr_y + 30
+    love.graphics.print("Exit", starting_x, curr_y + 15)
+    if mx >= starting_x and mx <= self.ww and my <= curr_y + 23.5 and my >= curr_y + 10 then
+        bn = love.mouse.isDown(1)
+        love.graphics.setColor(0.5,0.5,0.5,0.5)
+        love.graphics.rectangle("fill", starting_x, curr_y + 10, self.ww - starting_x, 23.5)
+        if not bn and last_mouse_down then
+            game_stack:pop()
+            game_stack:pop()
+            game_stack:pop()
+            game_stack:push(main_menu)
+        end
+        last_mouse_down = bn
+    end    
+    -- bn = love.mouse.isDown(1)
+    -- mx = love.mouse.getX()
+    -- my = love.mouse.getY()
+    -- if not bn and last_mouse_down and mx >= starting_x and mx <= self.ww and my <= curr_y + 23.5 and my >= curr_y then
+    -- end
+
 end
 
 
