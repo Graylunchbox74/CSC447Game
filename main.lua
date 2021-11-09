@@ -1,28 +1,11 @@
---2D game explained
---map is a 2 dimensional grid where each "turn" the player moves, each enemy gets to move too
---map will have standard ground, water (takes 2 "turns" to walk through 1 water instead of the standard 1 turn for normal ground), walls (cannot move through walls), doors (can be opened if unlocked with key)
---player starts with nothing in inventory
---player has 5 health
---n enemies spawn at start of level in predetermined locations
---enemies deal 1 damage on the player per attack and enemies are only melee (unless they have a bow and arrow)
---items in game have different actions
---  -sword: deals 1 damage to enemy (enemies have 2 health)
---  -potion: heals player to full health
---  -key: opens a door that corresponds to the key color
---  -bow and arrow: shoots arrow in 1 of 4 directions (up, down, left, right) arrow moves 2 spaces per turn and deals 2 damage
---      -enemies can also pick up or spawn with a bow and arrow
---if player steps on golden flag they win the level
-
 ----------------------------------------------------------------------------
 ------------------------Requirements for Enemy AI---------------------------
 ----------------------------------------------------------------------------
 --1. AI should create a path from its current position to the player and use that path to move to the player
+    --1a. Try to make the AI choose an efficient path, remember that water takes twice as long to walk through as grass
 --2. An issue with AI in games is that they are highly predictable, implement some randomness into your AI so the player can't always determine the next move
---3. 
 
--- local world_editor = require("lib.world_editor").world_editor
--- local world_editor_menu = require("lib.world_editor").world_editor_menu
-
+last_mouse_down = false
 function newButton(text, fn)
     return {
         text = text,
@@ -84,9 +67,10 @@ function main_menu:draw()
         if mx >= bx and my >= by and mx <= bx + button_width and my <= by + self.BUTTON_HEIGHT then
             color = {0.5,0.4,0.4,1}
             bn = love.mouse.isDown(1)
-            if bn then
+            if not bn and last_mouse_down then
                 button.fn()
             end
+            last_mouse_down = bn
         end
 
         love.graphics.setColor(unpack(color))
@@ -636,6 +620,9 @@ function world_editor_menu:update()
     return
 end
 
+
+
+
 function world_editor_menu:draw()
     local mouse_x = 0
     local mouse_y = 0
@@ -658,12 +645,13 @@ function world_editor_menu:draw()
             if mx >= bx and my >= by and mx <= bx + button_width and my <= by + self.BUTTON_HEIGHT then
                 color = {0.5,0.4,0.4,1}
                 bn = love.mouse.isDown(1)
-                if bn and mx ~= mouse_x and my ~= mouse_y then
+                if not bn and last_mouse_down and mx ~= mouse_x and my ~= mouse_y then
                     mouse_x = mx
                     mouse_y = my
                     button.fn()
                 end
             end
+            last_mouse_down = bn
 
             love.graphics.setColor(unpack(color))
             love.graphics.rectangle("fill",
@@ -714,11 +702,12 @@ function world_editor_menu:draw()
             if mx >= bx and my >= by and mx <= bx + button_width and my <= by + self.BUTTON_HEIGHT then
                 color = {0.5,0.4,0.4,1}
                 bn = love.mouse.isDown(1)
-                if bn and mx ~= mouse_x and my ~= mouse_y then
+                if not bn and last_mouse_down and mx ~= mouse_x and my ~= mouse_y then
                     mouse_x = mx
                     mouse_y = my
                     button.fn()
                 end
+                last_mouse_down = bn
             end
 
             love.graphics.setColor(unpack(color))
