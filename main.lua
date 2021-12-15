@@ -1142,11 +1142,12 @@ function world_editor:draw()
 
 end
 
-
+-- callback function that is called once to begin the game
 function love.load()
     game_stack:push(main_menu)
 end
 
+-- callback function that updates the state of the game every frame
 function love.update(dt)
     if love.keyboard.isDown "escape" then
         love.event.quit()
@@ -1157,12 +1158,14 @@ function love.update(dt)
     end
 end
 
+-- callback function that is trigged on a press of the keyboard
 function love.keypressed(key, scancode, isrepeat)
     if game_stack[#game_stack].keypressed then
         game_stack[#game_stack]:keypressed(key, scancode, isrepeat)
     end
 end
 
+-- callback function used to draw on the screen every frame
 function love.draw()
     game_stack[#game_stack]:draw()
 end
