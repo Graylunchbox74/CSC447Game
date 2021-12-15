@@ -1,6 +1,6 @@
 # Installation Instructions for Love2D  
 
-Go to installer URL: https://love2d.org  
+Installer URL: https://love2d.org  
 
 ## **Windows**  
  - Install the "64-bit installer"
@@ -19,7 +19,7 @@ Go to installer URL: https://love2d.org
 
  Be sure to restart a command prompt terminal.  
 
- Open a command prompt and type `love`  
+ Open a command prompt and type `love PathToLoveGame`    
 
 ## **Debian/Ubuntu**  
  - Find Love2D on debian package manager  
@@ -30,4 +30,4 @@ Go to installer URL: https://love2d.org
  - `sudo dpkg -i fileName`  
  - `sudo apt update && apt upgrade`  
 
-Type `love` in a terminal to test.  
+Type `love PathToLoveGame` in a terminal to test.  
